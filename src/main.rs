@@ -25,6 +25,7 @@ struct MainState {
     racket_mesh: graphics::Mesh,
     player_1_score: i32,
     player_2_score: i32,
+    duration: f32,
 }
 
 impl MainState {
@@ -44,6 +45,7 @@ impl MainState {
             player_1_score : 0,
             player_2_score : 0,
             ball_vel,
+            duration: 0.,
         }
     }
     
@@ -54,7 +56,7 @@ fn move_racket(pos: &mut glam::Vec2, keycode: KeyCode, y_dir: f32, dt: f32, ctx:
     if keyboard::is_key_pressed(ctx, keycode){
         pos.y += y_dir * PLAYER_SPEED * dt;
     }
-    pos.y = pos.y.clamp(RACKET_H_HALF, screen_h - RACKET_H_HALF);
+    
 }
 
 fn rand_vec(vec : &mut glam::Vec2, x: f32, y: f32){
@@ -71,61 +73,82 @@ fn rand_vec(vec : &mut glam::Vec2, x: f32, y: f32){
     vec.normalize();
 }
 
+fn sdSphere(x: glam::Vec2, pos: glam::Vec2, rad : f32) -> f32 {
+    let dist_2_surf: f32 = (x - pos).length() - rad;
+    dist_2_surf
+}
+
+fn sdBox(x: glam::Vec2, pos: glam::Vec2, ext: glam::Vec2) -> f32{
+    let dist = x - pos;
+    let distVec = dist.abs() - ext;
+    let maxdist = distVec.max(glam::Vec2::new(0.,0.));
+    //let dist_2_surf = maxdist.min(glam::Vec2::new(0.,0.)) + (distVec.max(glam::Vec2::new(0.,0.)).length());
+    let dist_2_surf = distVec.max(glam::Vec2::new(0., 0.)).length() + distVec.max_element().min(0.);
+    dist_2_surf
+}
+
+fn sdScene(x: glam::Vec2, screen_w: f32, screen_h: f32) -> f32{
+    let box_up_centre = glam::Vec2::new(screen_w * 0.5, 0. - (screen_h * 0.5));
+    let box_up_ext = glam::Vec2::new(screen_w * 0.5, screen_h * 0.5);
+    let box_down_centre = glam::Vec2::new(screen_w * 0.5, (screen_h+ (screen_h * 0.5)));
+    let box_down_ext = glam::Vec2::new(screen_w * 0.5, screen_h * 0.5);
+    let dist = sdBox(x, box_up_centre, box_up_ext);
+    let min_dist = dist.min(sdBox(x, box_down_centre, box_down_ext));
+    min_dist
+}
+
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult{
         //dt
-        let dt = ggez::timer::delta(ctx).as_secs_f32();
+        let dt: f32 = 1./60.;
+        self.duration += ggez::timer::delta(ctx).as_secs_f32();
         let (screen_w, screen_h) = graphics::drawable_size(ctx);
-        
-        move_racket(&mut self.player_1_pos, KeyCode::W, -1., dt, ctx);
-        move_racket(&mut self.player_1_pos, KeyCode::S, 1., dt, ctx);
-        move_racket(&mut self.player_2_pos, KeyCode::Up, -1., dt, ctx);
-        move_racket(&mut self.player_2_pos, KeyCode::Down, 1., dt, ctx);
-        
-        self.ball_pos = self.ball_pos + self.ball_vel * BALL_SPEED * dt;
+        while self.duration > dt {
+            self.duration -= dt;
+            
+            move_racket(&mut self.player_1_pos, KeyCode::W, -1., dt, ctx);
+            move_racket(&mut self.player_1_pos, KeyCode::S, 1., dt, ctx);
+            move_racket(&mut self.player_2_pos, KeyCode::Up, -1., dt, ctx);
+            move_racket(&mut self.player_2_pos, KeyCode::Down, 1., dt, ctx);
+            self.ball_pos = self.ball_pos + self.ball_vel * BALL_SPEED * dt;
+            
+            //racket collision
+            self.player_1_pos.y = self.player_1_pos.y.clamp(RACKET_H_HALF, screen_h - RACKET_H_HALF);
+            self.player_2_pos.y = self.player_2_pos.y.clamp(RACKET_H_HALF, screen_h - RACKET_H_HALF);
 
-        //리셋 조건
-        if self.ball_pos.x < 0. {
-            self.ball_pos.x = screen_w * 0.5;
-            self.ball_pos.y = screen_h * 0.5;
-            rand_vec(&mut self.ball_vel, BALL_SPEED, BALL_SPEED);
-            self.player_2_score += 1;
-        }
-        if self.ball_pos.x > screen_w {
-            self.ball_pos.x = screen_w * 0.5;
-            self.ball_pos.y = screen_h * 0.5;
-            rand_vec(&mut self.ball_vel, BALL_SPEED, BALL_SPEED);
-            self.player_1_score += 1;
-        }
 
-        //바운스
-        if self.ball_pos.y < BALL_SIZE_H{
-            self.ball_pos.y = BALL_SIZE_H;
-            self.ball_vel.y = self.ball_vel.y.abs();
-        }else if self.ball_pos.y > screen_h - BALL_SIZE_H{
-            self.ball_pos.y = screen_h - BALL_SIZE_H;
-            self.ball_vel.y = -self.ball_vel.y.abs();
-        }
+            //ball collision
+            //리셋 조건
+            //sdScene이 meshid를 같이 리턴하게 만들어야 할듯
+            if self.ball_pos.x < (0. + BALL_SIZE_H) {
+                self.ball_pos.x = screen_w * 0.5;
+                self.ball_pos.y = screen_h * 0.5;
+                rand_vec(&mut self.ball_vel, BALL_SPEED, BALL_SPEED);
+                self.player_2_score += 1;
+            }
+            if self.ball_pos.x > (screen_w - BALL_SIZE_H) {
+                self.ball_pos.x = screen_w * 0.5;
+                self.ball_pos.y = screen_h * 0.5;
+                rand_vec(&mut self.ball_vel, BALL_SPEED, BALL_SPEED);
+                self.player_1_score += 1;
+            }
 
-        //라켓충돌
-        let intersects_player_1 = 
-            self.ball_pos.x - BALL_SIZE_H < self.player_1_pos.x + RACKET_W_HALF
-            && self.ball_pos.x + BALL_SIZE_H > self.player_1_pos.x - RACKET_W_HALF
-            && self.ball_pos.y - BALL_SIZE_H < self.player_1_pos.y + RACKET_H_HALF
-            && self.ball_pos.y + BALL_SIZE_H > self.player_1_pos.y - RACKET_H_HALF;
-        
-        if intersects_player_1 {
-            self.ball_vel.x = self.ball_vel.x.abs();
-        }
+            //바운스
+            let d = sdScene(self.ball_pos, screen_w, screen_h) - BALL_SIZE_H;
+            if d < 0.{
+                self.ball_vel.y = -self.ball_vel.y;
+            }
 
-        let intersects_player_2 = 
-            self.ball_pos.x - BALL_SIZE_H < self.player_2_pos.x + RACKET_W_HALF
-            && self.ball_pos.x + BALL_SIZE_H > self.player_2_pos.x - RACKET_W_HALF
-            && self.ball_pos.y - BALL_SIZE_H < self.player_2_pos.y + RACKET_H_HALF
-            && self.ball_pos.y + BALL_SIZE_H > self.player_2_pos.y - RACKET_H_HALF;
+            //라켓충돌
+            let d1 = sdBox(self.ball_pos, self.player_1_pos, glam::Vec2::new(RACKET_W_HALF, RACKET_H_HALF)) - BALL_SIZE_H;
+            if d1 < 0.{
+                self.ball_vel.x = -self.ball_vel.x;
+            }
 
-        if intersects_player_2 {
-            self.ball_vel.x = -self.ball_vel.x.abs();
+            let d2 = sdBox(self.ball_pos, self.player_2_pos, glam::Vec2::new(RACKET_W_HALF, RACKET_H_HALF)) - BALL_SIZE_H;
+            if d2 < 0.{
+                self.ball_vel.x = -self.ball_vel.x;
+            }
         }
 
         Ok(())
@@ -135,9 +158,6 @@ impl event::EventHandler for MainState {
         //rendering
         graphics::clear(ctx, graphics::BLACK);
 
-        //let racket_rect = graphics::Rect::new(-RACKET_W_HALF, -RACKET_H_HALF, RACKET_W, RACKET_H);
-        //let racket_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), self.racket_rect, graphics::WHITE)?;
-        //let ball_rect = graphics::Rect::new(-BALL_SIZE_H, -BALL_SIZE_H, BALL_SIZE, BALL_SIZE);
         let ball_mesh = graphics::Mesh::new_circle(ctx, graphics::DrawMode::fill(), ggez::nalgebra::Point2::new(0., 0.), BALL_SIZE_H, 0.1, graphics::Color::from_rgb(255, 255, 0))?;
 
         let mut draw_param = graphics::DrawParam::default();

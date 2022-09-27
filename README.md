@@ -5,3 +5,5 @@
 Make Pong With RUST:
 https://www.youtube.com/watch?v=TUE_HSgQiG0
 
+충돌처리 개선:
+https://iquilezles.org/articles/distfunctions/
