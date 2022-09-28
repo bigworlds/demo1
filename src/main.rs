@@ -26,6 +26,8 @@ struct MainState {
     player_1_score: i32,
     player_2_score: i32,
     duration: f32,
+    screen_w: f32,
+    screen_h: f32,
 }
 
 impl MainState {
@@ -46,6 +48,8 @@ impl MainState {
             player_2_score : 0,
             ball_vel,
             duration: 0.,
+            screen_w,
+            screen_h,
         }
     }
     
@@ -81,8 +85,6 @@ fn sdSphere(x: glam::Vec2, pos: glam::Vec2, rad : f32) -> f32 {
 fn sdBox(x: glam::Vec2, pos: glam::Vec2, ext: glam::Vec2) -> f32{
     let dist = x - pos;
     let distVec = dist.abs() - ext;
-    let maxdist = distVec.max(glam::Vec2::new(0.,0.));
-    //let dist_2_surf = maxdist.min(glam::Vec2::new(0.,0.)) + (distVec.max(glam::Vec2::new(0.,0.)).length());
     let dist_2_surf = distVec.max(glam::Vec2::new(0., 0.)).length() + distVec.max_element().min(0.);
     dist_2_surf
 }
@@ -99,10 +101,9 @@ fn sdScene(x: glam::Vec2, screen_w: f32, screen_h: f32) -> f32{
 
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult{
-        //dt
+        //플레이 state
         let dt: f32 = 1./60.;
         self.duration += ggez::timer::delta(ctx).as_secs_f32();
-        let (screen_w, screen_h) = graphics::drawable_size(ctx);
         while self.duration > dt {
             self.duration -= dt;
             
@@ -113,42 +114,40 @@ impl event::EventHandler for MainState {
             self.ball_pos = self.ball_pos + self.ball_vel * BALL_SPEED * dt;
             
             //racket collision
-            self.player_1_pos.y = self.player_1_pos.y.clamp(RACKET_H_HALF, screen_h - RACKET_H_HALF);
-            self.player_2_pos.y = self.player_2_pos.y.clamp(RACKET_H_HALF, screen_h - RACKET_H_HALF);
-
+            self.player_1_pos.y = self.player_1_pos.y.clamp(RACKET_H_HALF, self.screen_h - RACKET_H_HALF);
+            self.player_2_pos.y = self.player_2_pos.y.clamp(RACKET_H_HALF, self.screen_h - RACKET_H_HALF);
 
             //ball collision
-            //리셋 조건
-            //sdScene이 meshid를 같이 리턴하게 만들어야 할듯
-            if self.ball_pos.x < (0. + BALL_SIZE_H) {
-                self.ball_pos.x = screen_w * 0.5;
-                self.ball_pos.y = screen_h * 0.5;
-                rand_vec(&mut self.ball_vel, BALL_SPEED, BALL_SPEED);
-                self.player_2_score += 1;
-            }
-            if self.ball_pos.x > (screen_w - BALL_SIZE_H) {
-                self.ball_pos.x = screen_w * 0.5;
-                self.ball_pos.y = screen_h * 0.5;
-                rand_vec(&mut self.ball_vel, BALL_SPEED, BALL_SPEED);
-                self.player_1_score += 1;
-            }
-
             //바운스
-            let d = sdScene(self.ball_pos, screen_w, screen_h) - BALL_SIZE_H;
-            if d < 0.{
+            let dist_2_wall = sdScene(self.ball_pos, self.screen_w, self.screen_h) - BALL_SIZE_H;
+            if dist_2_wall < f32::EPSILON{
                 self.ball_vel.y = -self.ball_vel.y;
             }
 
             //라켓충돌
-            let d1 = sdBox(self.ball_pos, self.player_1_pos, glam::Vec2::new(RACKET_W_HALF, RACKET_H_HALF)) - BALL_SIZE_H;
-            if d1 < 0.{
+            let dist_2_player1 = sdBox(self.ball_pos, self.player_1_pos, glam::Vec2::new(RACKET_W_HALF, RACKET_H_HALF)) - BALL_SIZE_H;
+            if dist_2_player1 < 0.{
                 self.ball_vel.x = -self.ball_vel.x;
             }
 
-            let d2 = sdBox(self.ball_pos, self.player_2_pos, glam::Vec2::new(RACKET_W_HALF, RACKET_H_HALF)) - BALL_SIZE_H;
-            if d2 < 0.{
+            let dist_2_player2 = sdBox(self.ball_pos, self.player_2_pos, glam::Vec2::new(RACKET_W_HALF, RACKET_H_HALF)) - BALL_SIZE_H;
+            if dist_2_player2 < 0.{
                 self.ball_vel.x = -self.ball_vel.x;
             }
+        }
+
+        //리셋 state
+        if self.ball_pos.x < (0. + BALL_SIZE_H) {
+            self.ball_pos.x = self.screen_w * 0.5;
+            self.ball_pos.y = self.screen_h * 0.5;
+            rand_vec(&mut self.ball_vel, BALL_SPEED, BALL_SPEED);
+            self.player_2_score += 1;
+        }
+        if self.ball_pos.x > (self.screen_w - BALL_SIZE_H) {
+            self.ball_pos.x = self.screen_w * 0.5;
+            self.ball_pos.y = self.screen_h * 0.5;
+            rand_vec(&mut self.ball_vel, BALL_SPEED, BALL_SPEED);
+            self.player_1_score += 1;
         }
 
         Ok(())
